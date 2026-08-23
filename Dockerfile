@@ -17,5 +17,8 @@ COPY frontend ./frontend
 # Expose the port the app runs on
 EXPOSE 8000
 
+# Move into the backend folder before running
+WORKDIR /app/backend
+
 # Command to run the application
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
