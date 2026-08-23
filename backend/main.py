@@ -91,6 +91,7 @@ def get_patients(db: Session = Depends(get_db)):
             "confidence": round(enc.ml_confidence, 1) if enc.ml_confidence else 0,
             "priority": compute_priority(enc.esi, wait_time_min, enc.ml_confidence),
             "wait_time_min": int(wait_time_min),
+            "arrival_time": enc.arrival_time.isoformat() + "Z",
             "status": enc.status,
             "discordant": False,
             "inconclusive": False,
