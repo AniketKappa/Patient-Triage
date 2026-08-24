@@ -7,6 +7,7 @@ class Patient(Base):
     __tablename__ = "patients"
     patient_id = Column(String, primary_key=True, index=True)
     age = Column(Integer)
+    gender = Column(String, nullable=True)
     chronic_conditions = Column(String)  # comma separated
     encounters = relationship("Encounter", back_populates="patient")
 

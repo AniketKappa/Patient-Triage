@@ -39,6 +39,7 @@ def get_db():
 class IntakeRequest(BaseModel):
     patient_id: str
     age: int
+    gender: str = "Unspecified"
     symptoms: str
     family_statements: str
     spo2: Optional[float] = None
@@ -51,7 +52,7 @@ class IntakeRequest(BaseModel):
 def new_intake(req: IntakeRequest, db: Session = Depends(get_db)):
     patient = db.query(models.Patient).filter(models.Patient.patient_id == req.patient_id).first()
     if not patient:
-        patient = models.Patient(patient_id=req.patient_id, age=req.age, chronic_conditions="")
+        patient = models.Patient(patient_id=req.patient_id, age=req.age, gender=req.gender, chronic_conditions="")
         db.add(patient)
         db.commit()
 
@@ -131,23 +132,26 @@ def get_patients(db: Session = Depends(get_db)):
                 
         # Reminder Logic
         if is_deteriorating:
-            reminders.append({"patient_id": patient.patient_id, "message": f"DETERIORATION DETECTED! Re-evaluate immediately."})
-        elif enc.esi in [1, 2] and wait_time_min > 10:
-            reminders.append({"patient_id": patient.patient_id, "message": f"ESI {enc.esi} waiting {int(wait_time_min)}m! Needs re-assessment."})
-        elif enc.esi == 3 and wait_time_min > 30:
-            reminders.append({"patient_id": patient.patient_id, "message": f"ESI 3 waiting >30m. Re-check vitals."})
+            reminders.append({"patient_id": patient.patient_id, "message": f"DETERIORATION DETECTED! SpO2 or HR worsening. Re-evaluate immediately."})
+        elif enc.esi in [1, 2] and wait_time_min > 5:
+            reminders.append({"patient_id": patient.patient_id, "message": f"ESI {enc.esi} waiting {int(wait_time_min)}m! Needs urgent re-assessment."})
+        elif enc.esi == 3 and wait_time_min > 15:
+            reminders.append({"patient_id": patient.patient_id, "message": f"ESI 3 waiting >15m. Re-check vitals."})
+        elif enc.esi >= 4 and wait_time_min > 45:
+            reminders.append({"patient_id": patient.patient_id, "message": f"ESI {enc.esi} waiting >45m. Check if condition changed."})
         
         diagnosis = get_diagnosis(enc.symptoms, enc.family_statements)
 
         out.append({
             "patient_id": patient.patient_id,
             "age": patient.age,
+            "gender": patient.gender or "Unspecified",
             "age_band": "adult" if patient.age > 12 else "pediatric",
             "symptoms": enc.symptoms.split(",") if enc.symptoms else [],
             "diagnosis": diagnosis,
             "esi": enc.esi,
             "confidence": round(enc.ml_confidence, 1) if enc.ml_confidence else 0,
-            "priority": compute_priority(enc.esi, wait_time_min, enc.ml_confidence, deterioration_penalty),
+            "priority": compute_priority(enc.esi, wait_time_min, enc.ml_confidence if enc.ml_confidence else 0, deterioration_penalty),
             "wait_time_min": int(wait_time_min),
             "arrival_time": enc.arrival_time.isoformat() + "Z",
             "status": enc.status,
