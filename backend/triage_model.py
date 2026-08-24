@@ -68,9 +68,10 @@ def assign_esi_ml(age, spo2, hr, bp_sys, temp_c, family_statements, symptoms="")
     # 3. Combined Score mapped to ESI 3, 4, 5
     net_score = (vitals_score * 0.40) + (nlp_score * 0.60)
     
-    if net_score > 60:
+    # Adjusted thresholds so ESI 3 and 4 are actually reachable
+    if net_score >= 35:
         return 3, round(net_score, 1)
-    elif net_score > 30:
+    elif net_score >= 12:
         return 4, round(net_score, 1)
     else:
         return 5, round(net_score, 1)
