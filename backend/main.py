@@ -158,7 +158,8 @@ def get_patients(db: Session = Depends(get_db)):
             "deteriorating": is_deteriorating
         })
     
-    out = sorted(out, key=lambda x: -x['priority'])
+    # Sort strictly by ESI first (1 is highest severity), then by priority within that ESI group
+    out = sorted(out, key=lambda x: (x['esi'], -x['priority']))
     
     return {"queue": out, "reminders": reminders}
 
