@@ -80,3 +80,30 @@ def compute_priority(esi, wait_time_min, net_score, deterioration_penalty=0):
     base = (5 - esi) * 25
     wait_bonus = wait_time_min * 1.5 
     return round(base + net_score + wait_bonus + deterioration_penalty, 2)
+
+@dataclass
+class VitalsReading:
+    timestamp: datetime
+    spo2: Optional[float] = None
+    hr: Optional[float] = None
+    bp_sys: Optional[float] = None
+    bp_dia: Optional[float] = None
+    rr: Optional[float] = None
+    temp_c: Optional[float] = None
+
+@dataclass
+class Patient:
+    patient_id: str
+    age: float
+    arrival_mode: str
+    symptoms: list[str] = field(default_factory=list)
+    vitals_history: list[VitalsReading] = field(default_factory=list)
+    self_report_severity: Optional[int] = None
+    history_available: bool = False
+    chronic_conditions: list[str] = field(default_factory=list)
+    unconscious: bool = False
+    wait_time_min: float = 0.0
+    severe_bleeding: bool = False
+    @property
+    def latest_vitals(self):
+        return self.vitals_history[-1] if self.vitals_history else None

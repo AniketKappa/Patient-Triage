@@ -11,10 +11,12 @@ db = SessionLocal()
 
 print("Seeding demo data into SQLite...")
 for i, p in enumerate(PATIENTS):
+    import random
     # Create patient
     db_patient = models.Patient(
         patient_id=p.patient_id,
         age=p.age,
+        gender=random.choice(["Male", "Female"]),
         chronic_conditions=",".join(p.chronic_conditions)
     )
     db.add(db_patient)
