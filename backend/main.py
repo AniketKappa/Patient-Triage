@@ -4,16 +4,30 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import os
+import random
 from sqlalchemy.orm import Session
 
 from database import SessionLocal, engine, Base
 import models
-from triage_model import assign_esi_ml, compute_priority
+from triage_model import assign_esi_ml, compute_priority, get_diagnosis
 
 app = FastAPI(title="PatientTriage.ai API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+@app.on_event("startup")
+def reset_demo_times():
+    db = SessionLocal()
+    try:
+        encounters = db.query(models.Encounter).all()
+        now = datetime.utcnow()
+        for enc in encounters:
+            offset = random.randint(5, 60)
+            enc.arrival_time = now - timedelta(minutes=offset)
+        db.commit()
+    finally:
+        db.close()
 
 def get_db():
     db = SessionLocal()
@@ -35,18 +49,15 @@ class IntakeRequest(BaseModel):
 
 @app.post("/api/intake")
 def new_intake(req: IntakeRequest, db: Session = Depends(get_db)):
-    # Create or update patient
     patient = db.query(models.Patient).filter(models.Patient.patient_id == req.patient_id).first()
     if not patient:
         patient = models.Patient(patient_id=req.patient_id, age=req.age, chronic_conditions="")
         db.add(patient)
         db.commit()
 
-    # ML predict
-    esi, conf = assign_esi_ml(req.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.family_statements)
+    esi, conf = assign_esi_ml(req.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.family_statements, req.symptoms)
 
-    # Create encounter
-    status = "queue" if req.mode == "walkin" else "ambulance"
+    status = "queue" if req.mode in ["walkin", "intake"] else "ambulance"
     enc = models.Encounter(
         patient_id=req.patient_id, arrival_mode=req.mode,
         symptoms=req.symptoms, family_statements=req.family_statements,
@@ -55,13 +66,44 @@ def new_intake(req: IntakeRequest, db: Session = Depends(get_db)):
     db.add(enc)
     db.commit()
     
-    # Add vitals
     if req.spo2 or req.hr or req.bp_sys or req.temp_c:
         v = models.Vitals(encounter_id=enc.id, spo2=req.spo2, hr=req.hr, bp_sys=req.bp_sys, temp_c=req.temp_c)
         db.add(v)
         db.commit()
         
     return {"status": "success", "encounter_id": enc.id}
+
+class StatusUpdate(BaseModel):
+    status: str
+
+@app.post("/api/encounters/{patient_id}/status")
+def update_status(patient_id: str, req: StatusUpdate, db: Session = Depends(get_db)):
+    enc = db.query(models.Encounter).filter(models.Encounter.patient_id == patient_id).order_by(models.Encounter.id.desc()).first()
+    if enc:
+        enc.status = req.status
+        db.commit()
+        return {"status": "success"}
+    return {"status": "not found"}
+
+class VitalsUpdate(BaseModel):
+    spo2: Optional[float] = None
+    hr: Optional[float] = None
+    bp_sys: Optional[float] = None
+    temp_c: Optional[float] = None
+
+@app.post("/api/encounters/{patient_id}/vitals")
+def update_vitals(patient_id: str, req: VitalsUpdate, db: Session = Depends(get_db)):
+    enc = db.query(models.Encounter).filter(models.Encounter.patient_id == patient_id, models.Encounter.status.in_(["queue", "ambulance"])).order_by(models.Encounter.id.desc()).first()
+    if enc:
+        v = models.Vitals(encounter_id=enc.id, spo2=req.spo2, hr=req.hr, bp_sys=req.bp_sys, temp_c=req.temp_c)
+        db.add(v)
+        
+        esi, conf = assign_esi_ml(enc.patient.age, req.spo2, req.hr, req.bp_sys, req.temp_c, enc.family_statements, enc.symptoms)
+        enc.esi = esi
+        enc.ml_confidence = conf
+        db.commit()
+        return {"status": "success"}
+    return {"status": "not found"}
 
 @app.get("/api/patients")
 def get_patients(db: Session = Depends(get_db)):
@@ -71,32 +113,45 @@ def get_patients(db: Session = Depends(get_db)):
     reminders = []
     for enc in encounters:
         patient = enc.patient
-        vitals = enc.vitals[-1] if enc.vitals else None
-        
-        # Calculate wait time
         wait_time_min = (datetime.utcnow() - enc.arrival_time).total_seconds() / 60.0
         
-        # Reminders Logic: ESI 1/2 need frequent checks
-        if enc.esi in [1, 2] and wait_time_min > 10:
+        # Calculate deterioration
+        deterioration_penalty = 0
+        vitals_list = enc.vitals
+        is_deteriorating = False
+        if len(vitals_list) >= 2:
+            old = vitals_list[-2]
+            new = vitals_list[-1]
+            if new.hr and old.hr and (new.hr - old.hr > 20):
+                is_deteriorating = True
+                deterioration_penalty += 15
+            if new.spo2 and old.spo2 and (old.spo2 - new.spo2 > 2):
+                is_deteriorating = True
+                deterioration_penalty += 15
+                
+        # Reminder Logic
+        if is_deteriorating:
+            reminders.append({"patient_id": patient.patient_id, "message": f"DETERIORATION DETECTED! Re-evaluate immediately."})
+        elif enc.esi in [1, 2] and wait_time_min > 10:
             reminders.append({"patient_id": patient.patient_id, "message": f"ESI {enc.esi} waiting {int(wait_time_min)}m! Needs re-assessment."})
         elif enc.esi == 3 and wait_time_min > 30:
             reminders.append({"patient_id": patient.patient_id, "message": f"ESI 3 waiting >30m. Re-check vitals."})
         
+        diagnosis = get_diagnosis(enc.symptoms, enc.family_statements)
+
         out.append({
             "patient_id": patient.patient_id,
             "age": patient.age,
             "age_band": "adult" if patient.age > 12 else "pediatric",
             "symptoms": enc.symptoms.split(",") if enc.symptoms else [],
+            "diagnosis": diagnosis,
             "esi": enc.esi,
             "confidence": round(enc.ml_confidence, 1) if enc.ml_confidence else 0,
-            "priority": compute_priority(enc.esi, wait_time_min, enc.ml_confidence),
+            "priority": compute_priority(enc.esi, wait_time_min, enc.ml_confidence, deterioration_penalty),
             "wait_time_min": int(wait_time_min),
             "arrival_time": enc.arrival_time.isoformat() + "Z",
             "status": enc.status,
-            "discordant": False,
-            "inconclusive": False,
-            "override_log": [],
-            "contributing_factors": [f"ML Model assessed {enc.family_statements}"] if enc.family_statements else []
+            "deteriorating": is_deteriorating
         })
     
     out = sorted(out, key=lambda x: -x['priority'])

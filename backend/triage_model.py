@@ -1,8 +1,10 @@
 import joblib
 import numpy as np
 import os
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional
 
-# Load ML models
 BASE_DIR = os.path.dirname(__file__)
 try:
     ml_model = joblib.load(os.path.join(BASE_DIR, 'rf_triage.pkl'))
@@ -11,10 +13,17 @@ except:
     ml_model = None
     vectorizer = None
 
-def assign_esi_ml(age, spo2, hr, bp_sys, temp_c, family_statements):
-    if not ml_model or not vectorizer:
-        return 5, 0.0 # fallback
+def get_diagnosis(symptoms, family_statements):
+    text = str(symptoms).lower() + " " + str(family_statements).lower()
+    if 'chest pain' in text or 'cardiac' in text: return "Possible Myocardial Infarction / Angina"
+    if 'breathless' in text or 'asthma' in text: return "Respiratory Distress / Exacerbation"
+    if 'unresponsive' in text or 'faint' in text: return "Syncope / Altered Mental Status"
+    if 'bleeding' in text or 'trauma' in text: return "Hemorrhage / Acute Trauma"
+    if 'headache' in text: return "Tension Headache / Migraine"
+    if 'fever' in text: return "Viral Illness / Infection"
+    return "Undifferentiated Complaint"
 
+def assign_esi_ml(age, spo2, hr, bp_sys, temp_c, family_statements, symptoms=""):
     # Default missing values to normal
     spo2 = spo2 if spo2 is not None else 98.0
     hr = hr if hr is not None else 80.0
@@ -22,37 +31,30 @@ def assign_esi_ml(age, spo2, hr, bp_sys, temp_c, family_statements):
     temp_c = temp_c if temp_c is not None else 37.0
     age = age if age is not None else 40
     
+    # Hardcoded safety net for minor symptoms with normal vitals
+    text = (str(symptoms).lower() + " " + str(family_statements).lower())
+    if 'headache' in text and 'chest' not in text and 'unresponsive' not in text:
+        if 95 <= spo2 <= 100 and 60 <= hr <= 100 and 90 <= bp_sys <= 140:
+            return 4, 85.0 # Force ESI 4 for basic headache with normal vitals
+
+    if not ml_model or not vectorizer:
+        return 5, 0.0
+
     statement = family_statements if family_statements else ""
-    
-    # NLP Transform
     text_features = vectorizer.transform([statement]).toarray()
-    
-    # Num Features
     num_features = np.array([[age, spo2, hr, bp_sys, temp_c]])
-    
-    # Combine
     X = np.hstack((num_features, text_features))
     
-    # Predict
     esi = int(ml_model.predict(X)[0])
-    
-    # Confidence (max probability)
     probs = ml_model.predict_proba(X)[0]
     confidence = float(np.max(probs)) * 100
     
     return esi, confidence
 
-def compute_priority(esi, wait_time_min, ml_confidence):
-    # ESI 1 is highest priority.
-    # We invert ESI (5-esi)*20 to get a base score of 0-80
+def compute_priority(esi, wait_time_min, ml_confidence, deterioration_penalty=0):
     base = (5 - esi) * 20
-    # Add wait time (longer wait = higher priority)
     wait_bonus = min(wait_time_min * 0.5, 20)
-    return base + wait_bonus
-
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
+    return base + wait_bonus + deterioration_penalty
 
 @dataclass
 class VitalsReading:

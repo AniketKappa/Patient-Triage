@@ -39,23 +39,25 @@
                     <table class="min-w-full divide-y divide-gray-200">
                         <thead class="bg-gray-50">
                             <tr>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Patient & Diagnosis</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ML ESI</th>
                                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wait</th>
-                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                             </tr>
                         </thead>
                         <tbody class="bg-white divide-y divide-gray-200">
                             <template x-for="patient in patients" :key="patient.patient_id">
                                 <tr :class="{'bg-red-50': patient.status === 'ambulance'}">
-                                    <td class="px-6 py-4 whitespace-nowrap">
+                                    <td class="px-6 py-4">
                                         <div class="text-sm font-bold text-gray-900" x-text="patient.patient_id"></div>
-                                        <div class="text-sm text-gray-500" x-text="patient.symptoms.join(', ')"></div>
+                                        <div class="text-xs text-gray-500 italic" x-text="patient.symptoms.join(', ')"></div>
+                                        <div class="text-xs font-semibold text-blue-600 mt-1" x-text="patient.diagnosis"></div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span x-show="patient.status === 'ambulance'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">En-Route</span>
                                         <span x-show="patient.status === 'queue'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">Waiting</span>
+                                        <div x-show="patient.deteriorating" class="mt-1 text-xs font-bold text-red-600 animate-pulse">Deteriorating!</div>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span class="px-3 py-1 inline-flex text-sm leading-5 font-bold rounded-full"
@@ -70,8 +72,13 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 font-mono">
                                         <span x-text="formatWaitTime(patient.arrival_time)"></span>
+                                        <div class="text-xs text-gray-400 mt-1">Pri: <span x-text="patient.priority"></span></div>
                                     </td>
-                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-800" x-text="patient.priority"></td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-semibold flex flex-col space-y-2">
+                                        <button @click="updateStatus(patient.patient_id, 'treated')" class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs">Admit / Discharge</button>
+                                        <button x-show="patient.status === 'ambulance'" @click="updateStatus(patient.patient_id, 'queue')" class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs">Mark Arrived</button>
+                                        <button @click="openReassess(patient)" class="bg-purple-500 hover:bg-purple-600 text-white px-2 py-1 rounded text-xs">Re-Assess Vitals</button>
+                                    </td>
                                 </tr>
                             </template>
                         </tbody>
@@ -154,6 +161,31 @@
         </div>
     </div>
 
+    <!-- Reassess Modal -->
+    <div x-show="showReassess" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+            <h2 class="text-xl font-bold mb-4">Re-Assess Patient Vitals</h2>
+            <form @submit.prevent="submitReassess" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase">SpO2 (%)</label>
+                    <input type="number" x-model="reassessForm.spo2" class="mt-1 block w-full border border-gray-300 rounded py-1 px-2">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase">Heart Rate</label>
+                    <input type="number" x-model="reassessForm.hr" class="mt-1 block w-full border border-gray-300 rounded py-1 px-2">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-700 uppercase">Sys BP</label>
+                    <input type="number" x-model="reassessForm.bp_sys" class="mt-1 block w-full border border-gray-300 rounded py-1 px-2">
+                </div>
+                <div class="flex justify-end space-x-2 pt-4">
+                    <button type="button" @click="showReassess = false" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded">Cancel</button>
+                    <button type="submit" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded">Save & Update</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script>
         function triageApp() {
             return {
@@ -191,6 +223,48 @@
                         this.reminders = data.reminders;
                     } catch (e) {
                         console.error('Failed to fetch data', e);
+                    }
+                },
+
+                async updateStatus(patientId, newStatus) {
+                    try {
+                        await fetch(`/api/encounters/${patientId}/status`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: newStatus })
+                        });
+                        this.fetchData();
+                    } catch (e) {
+                        alert('Error updating status');
+                    }
+                },
+
+                reassessForm: { patient_id: '', spo2: '', hr: '', bp_sys: '', temp_c: '' },
+                showReassess: false,
+
+                openReassess(patient) {
+                    this.reassessForm.patient_id = patient.patient_id;
+                    this.showReassess = true;
+                },
+
+                async submitReassess() {
+                    const payload = {
+                        spo2: this.reassessForm.spo2 ? parseFloat(this.reassessForm.spo2) : null,
+                        hr: this.reassessForm.hr ? parseFloat(this.reassessForm.hr) : null,
+                        bp_sys: this.reassessForm.bp_sys ? parseFloat(this.reassessForm.bp_sys) : null,
+                        temp_c: this.reassessForm.temp_c ? parseFloat(this.reassessForm.temp_c) : null
+                    };
+                    try {
+                        await fetch(`/api/encounters/${this.reassessForm.patient_id}/vitals`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        this.showReassess = false;
+                        this.reassessForm = { patient_id: '', spo2: '', hr: '', bp_sys: '', temp_c: '' };
+                        this.fetchData();
+                    } catch (e) {
+                        alert('Error submitting vitals');
                     }
                 },
 
