@@ -1,51 +1,92 @@
 # 🏥 PatientTriage.ai
 
-**Live Demo:** [https://patient-triage.onrender.com](https://patient-triage.onrender.com)
+**An Enterprise-Grade Clinical Decision Support System (CDSS) for Emergency Departments.**
 
-PatientTriage.ai is a real-time, hybrid AI triage framework designed to achieve dynamic patient prioritization and explicit severity categorization (ESI 1-5) across parallel clinical queues in overcrowded emergency rooms. It was recently implemented as a Proof of Concept (POC) in a local hospital setting.
+Developed for the **Accenture Innovation Challenge**, PatientTriage.ai is a full-stack, AI-augmented triage engine designed to combat ED overcrowding, reduce algorithmic undertriage, and optimize hospital resource allocation. 
 
-## 🚀 Key Features
+Rather than relying on a "black-box" LLM, this platform utilizes a hybrid architecture: it anchors life-safety decisions on deterministic clinical standards (ESI v5, PALS, CTAS) and strategically applies Machine Learning (Multi-Output Random Forests, Conformal Prediction) exclusively for resource planning and ambiguity resolution.
 
-* **Hybrid Clinical Decision Support System (CDSS):** Uses a Random Forest classifier and TF-IDF NLP pipeline to parse unstructured symptom descriptions (60% weight) combined with vitals deviation (40% weight).
-* **Clinical Safety-Net Overrides:** Hard-coded algorithmic bypasses ensure patients with critical vitals (e.g., SpO2 < 90, Sys BP < 80) are instantly categorized as ESI 1/2, preventing catastrophic ML under-triage.
-* **Dynamic Priority Scaling:** Patient queues aren't static. Priority scores continuously increase based on wait time, ensuring stable patients are not left stranded while critical patients are handled.
-* **Real-time Deterioration Alerts:** Re-assessing vitals cross-references historical data. Sudden drops in SpO2 or spikes in Heart Rate trigger an immediate priority penalty and can dynamically shift a patient from the Standard Queue into the Critical Queue.
-* **Split Queue Dashboard:** Visually separates Resuscitation/Emergent (ESI 1 & 2) from Standard Triage (ESI 3, 4, 5).
+---
 
-## 🛠️ Tech Stack
+## ✨ Core Functionalities
 
-* **Frontend:** HTML5, Tailwind CSS, Alpine.js (Reactive polling)
-* **Backend:** Python, FastAPI, SQLite, SQLAlchemy (ORM)
-* **Machine Learning:** Scikit-Learn (Random Forest, TF-IDF), NumPy, Pandas
-* **Deployment:** Render (PaaS)
+### 1. Hybrid Triage Engine (ESI v5)
+* **Gate A (Immediate Life-Saving):** Deterministic evaluation using age-banded Pediatric Advanced Life Support (PALS) thresholds.
+* **Gate B (High-Risk Conditions):** Evaluates chief complaints against a version-controlled clinical YAML rulebook with NLP negation-handling.
+* **Gate C (Resource Prediction ML):** A TF-IDF & Random Forest pipeline that predicts precise ED resource utilization (Labs, ECG, Imaging) to stratify ESI 3, 4, and 5 patients.
+* **Gate D (Danger Vitals):** A dynamic safety net that flags abnormal vitals and forces a blocking UI prompt for clinicians to accept an uptriage or provide a structured dismissal reason.
 
-## 💻 Local Installation
+### 2. CDSS Safety & Governance
+* **Conformal Prediction Sets:** The ML model quantifies its own uncertainty. If a patient's probability distribution straddles an acuity boundary (e.g., ESI 2 vs. 3), the system automatically escalates to the safer, higher-acuity level to mathematically prevent undertriage.
+* **Event-Sourced Audit Trail:** Replaces standard mutable databases with an append-only `EventLog`. Every AI prediction, vital sign update, and human override is immutably stamped with the actor, reason, and model version.
+* **DPDP 2023 Compliance:** Built to align with India’s Digital Personal Data Protection Act, enforcing strict data-minimization, emergency-processing consent waivers, and algorithmic fairness monitoring.
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/AniketKappa/Patient-Triage.git
-   cd Patient-Triage/backend
-   ```
+### 3. High-Performance Clinical Frontend
+* **CTAS Reassessment Worklist:** Implements the Canadian Triage and Acuity Scale (CTAS) countdown timers (e.g., ESI 2 = 15m). If a patient sits unassessed, the UI escalates from "Due" to "OVERDUE", eventually throwing a bright red "SAFETY BREACH" alert.
+* **Ambulance Pre-Arrival Lane:** Allows EMS to dispatch provisional data. Patients render with a distinct `PROVISIONAL (EN-ROUTE)` UI state until a nurse physically clicks "Arrived".
+* **Explanation Layer & Needs Planner:** Replaces black-box scores with total transparency. Every card displays the **WHY** (clinical rule cited) and the **CONFIDENCE**. ESI 3+ patients generate a "Needs Planner" card predicting the exact medical equipment required.
+* **Mass-Casualty Surge Simulator:** A dedicated UI trigger (`/api/admin/surge`) that injects 15 synthetic, highly-complex patients into the database simultaneously to stress-test the engine's sorting logic and timer degradation during extreme ED volume.
 
-2. **Set up the virtual environment:**
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
+---
 
-3. **Install dependencies:**
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 🛠️ Technology Stack
 
-4. **Generate the Database & Synthetic Data:**
-   ```bash
-   python seed.py
-   ```
+**Backend Architecture**
+* **Framework:** FastAPI (Python 3.11)
+* **Database:** SQLite with SQLAlchemy ORM (Event-Sourced schema)
+* **Machine Learning:** Scikit-Learn (Multi-Output Random Forest Classifier, TF-IDF Vectorization)
+* **Server:** Uvicorn
 
-5. **Run the FastAPI Server:**
-   ```bash
-   uvicorn main:app --reload
-   ```
+**Frontend Application**
+* **Core:** HTML5, Alpine.js (Lightweight Reactive SPA)
+* **Styling:** Tailwind CSS
+* **Architecture:** Zero-build-step architecture for maximum reliability and rapid iterative deployment.
 
-6. Open your browser and navigate to `http://localhost:8000` to view the dashboard.
+**Deployment & DevOps**
+* **Containerization:** Docker
+* **Hosting:** Render (Auto-deployments)
+
+---
+
+## 🚀 Running Locally
+
+### Option 1: Docker (Recommended)
+```bash
+# Clone the repository
+git clone https://github.com/AniketKappa/Patient-Triage.git
+cd Patient-Triage
+
+# Build and run the container
+docker build -t patient-triage .
+docker run -p 8000:8000 patient-triage
+```
+Access the application at `http://localhost:8000`
+
+### Option 2: Standard Python Environment
+```bash
+cd Patient-Triage/backend
+
+# Create virtual environment and install dependencies
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+
+# Run the server
+uvicorn main:app --reload
+```
+
+---
+
+## 📂 Project Structure
+* `backend/main.py`: FastAPI server, routing, and timeline metrics.
+* `backend/esi_rules.py`: Deterministic ESI v5 and CTAS clinical logic core.
+* `backend/triage_model.py`: Adapter connecting the FastAPI data shapes to the ML pipeline.
+* `backend/models.py`: SQLAlchemy schemas (Patients, Encounters, Vitals, EventLog).
+* `backend/train_resource_model.py`: Training script for the synthetic Gate C and Outcome-Risk models.
+* `frontend/index.html`: The complete Alpine.js/Tailwind SPA dashboard.
+* `docs/`: Comprehensive architecture documentation (`COMPLIANCE.md`, `ADOPTION.md`, `LIMITATIONS.md`).
+
+---
+
+## ⚠️ Disclaimer
+**This software is a prototype developed for a hackathon (Accenture Innovation Challenge).** It is not a registered Software as a Medical Device (SaMD). The machine learning weights provided in this repository are trained on synthetic data and must be retrospectively calibrated against localized hospital EHR data prior to any real-world clinical deployment. See `docs/LIMITATIONS.md` for a full breakdown of architectural constraints.
