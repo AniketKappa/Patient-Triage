@@ -72,6 +72,34 @@ def gate_a_lifesaving(ctx: TriageContext, obs: dict, text: str) -> List[str]:
     if obs.get('spo2') is not None and obs['spo2'] < 90:
         if ctx.baseline_spo2 is None or obs['spo2'] < ctx.baseline_spo2 - 2:
             evidence.append(f"SpO2 {obs['spo2']}% below safe baseline")
+            
+    hr = obs.get('hr')
+    if hr is not None:
+        if ctx.age_band == '<1m' and (hr < 80 or hr > 220): evidence.append(f"Neonate HR {hr} out of safe bounds")
+        elif ctx.age_band in ['1-12m', '1-3y', '3-5y', '5-12y', '12-18y'] and hr < 60: evidence.append(f"Pediatric bradycardia ({hr} bpm)")
+        elif ctx.age_band == '1-12m' and hr > 220: evidence.append(f"Infant extreme tachycardia ({hr} bpm)")
+        elif ctx.age_band in ['1-3y', '3-5y', '5-12y'] and hr > 180: evidence.append(f"Child extreme tachycardia ({hr} bpm)")
+        elif ctx.age_band == '>18y' and (hr < 40 or hr > 150): evidence.append(f"Adult severe HR ({hr} bpm)")
+
+    sbp = obs.get('sbp')
+    if sbp is not None and sbp < 80 and ctx.age_band == '>18y': 
+        evidence.append(f"Profound hypotension (SBP {sbp})")
+    if obs.get('avpu') in ['P', 'U']: 
+        evidence.append(f"AVPU: {obs['avpu']}")
+
+    gate_a_keywords = [
+        'apneic', 'apnoeic', 'occluded airway', 'intubation', 'nippv',
+        'pulseless', 'hypoperfusion', 'active seizure', 'seizing', 'hypoglycemia', 'hypoglycaemia',
+        'adrenaline', 'epinephrine', 'naloxone', 'narcan', 'dextrose', 'atropine', 
+        'adenosine', 'dopamine', 'penetrating trauma', 'flaccid', 'anaphylaxis', 
+        'cardiac arrest', 'unresponsive', 'coma', 'comatose'
+    ]
+    if detect_clinical_flags(text, gate_a_keywords):
+        evidence.append("Requires immediate life-saving intervention (Text Indicator)")
+    return evidence
+    if obs.get('spo2') is not None and obs['spo2'] < 90:
+        if ctx.baseline_spo2 is None or obs['spo2'] < ctx.baseline_spo2 - 2:
+            evidence.append(f"SpO2 {obs['spo2']}% below safe baseline")
     hr = obs.get('hr')
     if hr is not None:
         if hr < 40: evidence.append(f"Severe bradycardia ({hr} bpm)")

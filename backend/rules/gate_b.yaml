@@ -1,0 +1,21 @@
+rules:
+  - id: B_NEONATE_FEVER
+    trigger: age < 28d AND temp > 38.0
+    floor: 2
+    category: PEDS
+  - id: B_PREGNANCY_HTN
+    trigger: pregnant or postpartum AND (sbp < 90 OR sbp > 150)
+    floor: 2
+    category: OBGYN
+  - id: B_IMMUNE_FEVER
+    trigger: immunocompromised AND temp > 38.0
+    floor: 2
+    category: INFECTIOUS
+  - id: B_TORSION
+    trigger: testicular pain OR ovarian torsion
+    floor: 2
+    category: GU
+  - id: B_THUNDERCLAP
+    trigger: sudden severe headache
+    floor: 2
+    category: NEURO

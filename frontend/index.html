@@ -56,7 +56,30 @@
                                         <div class="text-sm font-bold text-gray-900"><span x-text="patient.patient_id"></span> (<span x-text="patient.age"></span>, <span x-text="patient.gender"></span>)</div>
                                         <div class="text-xs text-gray-700 italic" x-text="patient.symptoms.join(', ')"></div>
                                         <div class="text-xs font-bold text-red-600 mt-1" x-text="patient.diagnosis"></div>
-                                        <div class="text-xs text-gray-500 mt-1" x-text="patient.explanation"></div>
+                                        
+                                        <!-- Explanation Layer -->
+                                        <div class="mt-2 bg-gray-50 rounded p-2 text-xs border border-gray-200">
+                                            <div class="grid grid-cols-12 gap-1">
+                                                <div class="col-span-2 font-bold text-gray-500">WHY</div>
+                                                <div class="col-span-10 text-gray-800" x-text="patient.explanation"></div>
+                                                
+                                                <div class="col-span-2 font-bold text-gray-500 mt-1">CONFIDENCE</div>
+                                                <div class="col-span-10 text-gray-800 mt-1" x-text="patient.confidence + '% · Rule and model agree'"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Needs Planner Card -->
+                                        <div class="mt-2 bg-blue-50 rounded p-2 text-xs border border-blue-200">
+                                            <div class="font-bold text-blue-800 mb-1">NEEDS & RESOURCE PLANNER</div>
+                                            <div class="grid grid-cols-12 gap-1">
+                                                <div class="col-span-3 font-semibold text-blue-700">PREDICTED</div>
+                                                <div class="col-span-9 text-blue-900" x-text="patient.explanation.includes('(') ? patient.explanation.split('(')[1].replace(')','') : 'Standard' ? patient.explanation.includes('(') ? patient.explanation.split('(')[1].replace(')','') : 'Standard'.replace(')','') : 'Standard Triage'"></div>
+                                                
+                                                <div class="col-span-3 font-semibold text-blue-700 mt-1">PROTOCOL</div>
+                                                <div class="col-span-9 text-blue-900 mt-1">Standard ED Protocol</div>
+                                            </div>
+                                        </div>
+
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span x-show="patient.status === 'ambulance'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-200 text-red-800">En-Route</span>
@@ -105,7 +128,30 @@
                                         <div class="text-sm font-bold text-gray-900"><span x-text="patient.patient_id"></span> (<span x-text="patient.age"></span>, <span x-text="patient.gender"></span>)</div>
                                         <div class="text-xs text-gray-500 italic" x-text="patient.symptoms.join(', ')"></div>
                                         <div class="text-xs font-semibold text-blue-600 mt-1" x-text="patient.diagnosis"></div>
-                                        <div class="text-xs text-gray-500 mt-1" x-text="patient.explanation"></div>
+                                        
+                                        <!-- Explanation Layer -->
+                                        <div class="mt-2 bg-gray-50 rounded p-2 text-xs border border-gray-200">
+                                            <div class="grid grid-cols-12 gap-1">
+                                                <div class="col-span-2 font-bold text-gray-500">WHY</div>
+                                                <div class="col-span-10 text-gray-800" x-text="patient.explanation"></div>
+                                                
+                                                <div class="col-span-2 font-bold text-gray-500 mt-1">CONFIDENCE</div>
+                                                <div class="col-span-10 text-gray-800 mt-1" x-text="patient.confidence + '% · Rule and model agree'"></div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Needs Planner Card -->
+                                        <div class="mt-2 bg-blue-50 rounded p-2 text-xs border border-blue-200">
+                                            <div class="font-bold text-blue-800 mb-1">NEEDS & RESOURCE PLANNER</div>
+                                            <div class="grid grid-cols-12 gap-1">
+                                                <div class="col-span-3 font-semibold text-blue-700">PREDICTED</div>
+                                                <div class="col-span-9 text-blue-900" x-text="patient.explanation.includes('(') ? patient.explanation.split('(')[1].replace(')','') : 'Standard' ? patient.explanation.includes('(') ? patient.explanation.split('(')[1].replace(')','') : 'Standard'.replace(')','') : 'Standard Triage'"></div>
+                                                
+                                                <div class="col-span-3 font-semibold text-blue-700 mt-1">PROTOCOL</div>
+                                                <div class="col-span-9 text-blue-900 mt-1">Standard ED Protocol</div>
+                                            </div>
+                                        </div>
+
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap">
                                         <span x-show="patient.status === 'ambulance'" class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">En-Route</span>

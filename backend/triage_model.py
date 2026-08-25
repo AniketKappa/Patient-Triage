@@ -47,13 +47,15 @@ def get_diagnosis(symptoms: str, family_statements: str) -> str:
     return 'Undifferentiated'
 
 def compute_priority(esi: int, time_to_breach: float, ml_confidence: float, deterioration_penalty: int) -> float:
+    # No more deterioration penalty scalar addition. Strict tuple sorting.
+    return time_to_breach
     # We sort by ESI strictly in the outer layer. 
     # Inside the ESI bucket, we sort by priority.
     # The higher the priority, the closer they are to the top of their ESI group.
     # Negative time_to_breach means they are breached (e.g. -15 means 15 mins overdue).
     # So we want lower time_to_breach to equal higher priority.
     
-    return (-time_to_breach) + deterioration_penalty
+    return (-time_to_breach)
 
 # Legacy dataclasses for seed.py / demo_data.py compatibility
 from dataclasses import dataclass, field
