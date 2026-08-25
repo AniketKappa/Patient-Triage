@@ -411,15 +411,19 @@
                             </div>
                         </div>
                         
-                        <div class="mt-3 bg-white/60 rounded p-2 text-xs border border-gray-200 shadow-sm flex flex-col space-y-1">
-                            <div class="flex items-start space-x-2">
-                                <div class="font-bold text-gray-500 w-16">WHY</div>
-                                <div class="text-gray-800 font-medium flex-1">${why}</div>
-                            </div>
-                            <div class="flex items-start space-x-2">
-                                <div class="font-bold text-gray-500 w-16">CONFIDENCE</div>
-                                <div class="text-gray-800 font-medium flex-1">${conf.split(':').pop().trim()}</div>
-                            </div>
+                        <div class="mt-3 bg-white/60 rounded p-2 text-xs border border-gray-200 shadow-sm">
+                            <table class="w-full text-left table-fixed">
+                                <tbody>
+                                    <tr>
+                                        <td class="font-bold text-gray-500 w-24 align-top">WHY</td>
+                                        <td class="text-gray-800 font-medium align-top pb-1">${why}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="font-bold text-gray-500 w-24 align-top">CONFIDENCE</td>
+                                        <td class="text-gray-800 font-medium align-top">${conf.split(':').pop().trim()}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                         
                         ${resourcesHtml}
