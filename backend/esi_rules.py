@@ -1,12 +1,13 @@
+import re
 from dataclasses import dataclass
 from typing import Optional, List, Literal
 
 @dataclass(frozen=True)
 class TriageContext:
     age_yr: float
-    age_band: str           # '<1m' | '1-12m' | '1-3y' | '3-5y' | '5-12y' | '12-18y' | '>18y'
-    geriatric: bool         # >=65
-    pregnancy_state: str    # 'not_pregnant' | 'pregnant' | 'postpartum' | 'unknown'
+    age_band: str           
+    geriatric: bool         
+    pregnancy_state: str    
     immunocompromised: bool
     baseline_spo2: Optional[float]
     on_home_oxygen: bool
@@ -15,7 +16,8 @@ class TriageContext:
     anticoagulated: bool
     baseline_mental_status: Optional[str]
     immunisations_current: Optional[bool]
-    history_depth: str      # 'rich' | 'partial' | 'none'
+    history_depth: str      
+    critical_look_override: bool = False  # UI bypass for Gate A
 
 @dataclass
 class TriageResult:
@@ -24,6 +26,26 @@ class TriageResult:
     evidence: List[str]
     pending_prompt: Optional[str] = None
     confidence: str = "High"
+
+# --- Clinical NLP Flagger (Lightweight Negation Handling) ---
+NEGATION_TERMS = r"\b(no|not|denies|without|negative for|ruled out|resolved|history of)\b"
+
+def detect_clinical_flags(text: str, keywords: List[str]) -> bool:
+    """
+    Checks for presence of keywords in text, ensuring they are not negated 
+    (e.g., ignores "denies chest pain").
+    """
+    phrases = re.split(r'[.,;!\n]', text.lower())
+    for phrase in phrases:
+        for kw in keywords:
+            kw_match = re.search(r'\b' + re.escape(kw) + r'\b', phrase)
+            if kw_match:
+                neg_match = re.search(NEGATION_TERMS, phrase)
+                # If a negation term exists and appears BEFORE the keyword in the same phrase, consider it negated
+                if neg_match and neg_match.start() < kw_match.start():
+                    continue
+                return True
+    return False
 
 def get_age_band(age_yr: float) -> str:
     if age_yr < 1/12: return '<1m'
@@ -34,66 +56,96 @@ def get_age_band(age_yr: float) -> str:
     if age_yr < 18: return '12-18y'
     return '>18y'
 
-def gate_a_lifesaving(ctx: TriageContext, obs: dict, text: str) -> bool:
-    # Deterministic ESI 1 check
-    # obs: spo2, hr, rr, sbp, temp_c, avpu
+def gate_a_lifesaving(ctx: TriageContext, obs: dict, text: str) -> List[str]:
+    evidence = []
     
-    # 1. Airway / Breathing
+    # 1. Manual Override (CRITICAL LOOK)
+    if ctx.critical_look_override:
+        evidence.append("CRITICAL LOOK triggered by clinician")
+        return evidence
+
+    # 2. Vitals-based Hard Passes
     if obs.get('spo2') is not None and obs['spo2'] < 90:
         if ctx.baseline_spo2 is None or obs['spo2'] < ctx.baseline_spo2 - 2:
-            return True
+            evidence.append(f"SpO2 {obs['spo2']}% below safe baseline")
             
-    # 2. Circulation (Severe brady/tachycardia or hypotension)
     hr = obs.get('hr')
     if hr is not None:
-        if hr < 40: return True  # Severe bradycardia
-        if ctx.age_band == '>18y' and hr > 150: return True # Severe tachycardia adult
+        if hr < 40: evidence.append(f"Severe bradycardia ({hr} bpm)")
+        if ctx.age_band == '>18y' and hr > 150: evidence.append(f"Severe tachycardia ({hr} bpm)")
     
     sbp = obs.get('sbp')
-    if sbp is not None and sbp < 80 and ctx.age_band == '>18y': return True
+    if sbp is not None and sbp < 80 and ctx.age_band == '>18y': 
+        evidence.append(f"Profound hypotension (SBP {sbp})")
         
-    # 3. Disability
-    if obs.get('avpu') in ['P', 'U']: return True
-    
-    # Text triggers
-    text_lower = text.lower()
-    if 'unresponsive' in text_lower or 'cardiac arrest' in text_lower or 'overdose' in text_lower or 'anaphylaxis' in text_lower:
-        return True
-        
-    return False
+    if obs.get('avpu') in ['P', 'U']: 
+        evidence.append(f"AVPU: {obs['avpu']}")
+
+    # 3. Text-based Exhaustive Indicators (Gate A)
+    # ESI 1 requires immediate life-saving intervention. We search without negation for some, 
+    # but use the NLP flagger to be safe.
+    gate_a_keywords = [
+        'apneic', 'apnoeic', 'occluded airway', 'intubation', 'nippv',
+        'pulseless', 'hypoperfusion', 'active seizure', 'seizing', 'hypoglycemia', 'hypoglycaemia',
+        'adrenaline', 'epinephrine', 'naloxone', 'narcan', 'dextrose', 'atropine', 
+        'adenosine', 'dopamine', 'penetrating trauma', 'flaccid', 'anaphylaxis', 
+        'cardiac arrest', 'unresponsive', 'coma', 'comatose'
+    ]
+    if detect_clinical_flags(text, gate_a_keywords):
+        evidence.append("Requires immediate life-saving intervention (Text Indicator)")
+
+    return evidence
 
 def gate_b_high_risk(ctx: TriageContext, obs: dict, text: str) -> List[str]:
-    # Returns a list of evidence strings if ESI 2 rules hit
     evidence = []
-    text_lower = text.lower()
     
-    # B.CARDIAC.ACS
-    acs_keywords = ['chest pain', 'chest pressure', 'jaw pain', 'arm pain']
-    if any(k in text_lower for k in acs_keywords):
-        evidence.append('High-risk cardiac presentation (ACS protocols)')
+    # 1. Exhaustive NLP Flagging (Rule-first with NLP)
+    
+    # Cardiac / ACS
+    if detect_clinical_flags(text, ['chest pain', 'chest pressure', 'jaw pain', 'arm pain', 'epigastric pain', 'unexplained dyspnea']):
+        evidence.append('B.CARDIAC: High-risk cardiac presentation')
         
-    # B.OB.HTN
+    # Neuro / Stroke / AMS / Behavioral
+    if detect_clinical_flags(text, ['stroke', 'facial droop', 'weakness', 'slurred speech', 'hemiparesis', 'thunderclap', 'altered mental', 'confused', 'lethargic']):
+        evidence.append('B.NEURO: High-risk neurological or AMS')
+    if detect_clinical_flags(text, ['suicidal', 'homicidal', 'psychosis', 'combative', 'overdose']):
+        evidence.append('B.BEHAVIORAL: High-risk psychiatric/toxicologic')
+
+    # Respiratory distress signs
+    if detect_clinical_flags(text, ['stridor', 'tripoding', 'retractions', 'grunting', 'unable to manage secretions']):
+        evidence.append('B.RESP: High respiratory effort')
+        
+    # OB/GYN / GU
+    if detect_clinical_flags(text, ['ectopic', 'heavy vaginal bleeding', 'postpartum hemorrhage', 'testicular torsion', 'scrotal pain']):
+        evidence.append('B.OBGYN_GU: High-risk genitourinary')
+        
+    # Severe systemic pain
+    if detect_clinical_flags(text, ['severe pain', 'flank pain', 'renal colic', 'sickle cell']):
+        evidence.append('B.PAIN: Severe systemic pain')
+        
+    # Trauma / Environmental
+    if detect_clinical_flags(text, ['ejected', 'extrication', 'amputation', 'sexual assault', 'compartment syndrome', 'needlestick', 'button battery', 'fall > 20']):
+        evidence.append('B.TRAUMA: High-risk mechanism/environmental')
+        
+    # Infectious
+    if detect_clinical_flags(text, ['sepsis', 'septic']):
+        evidence.append('B.INFECTIOUS: Sepsis suspicious')
+    
+    # 2. Vitals/Context Rules
     if ctx.pregnancy_state in ['pregnant', 'postpartum']:
         sbp = obs.get('sbp')
         if sbp is not None and (sbp < 90 or sbp > 150):
-            evidence.append('Obstetric patient with abnormal BP (<90 or >150)')
+            evidence.append('B.OB.HTN: Abnormal BP in pregnancy')
             
-    # B.PEDS.NEONATE_FEVER
     if ctx.age_band == '<1m' and obs.get('temp_c') is not None and obs['temp_c'] > 38.0:
-        evidence.append('Neonate (<28 days) with fever > 38.0C')
-
-    # B.NEURO
-    if 'stroke' in text_lower or 'facial droop' in text_lower or 'weakness' in text_lower or 'thunderclap' in text_lower or 'suicidal' in text_lower:
-        evidence.append('High-risk neurological or behavioral presentation')
-
-    # B.PAIN
-    if 'severe pain' in text_lower and ('flank' in text_lower or 'testicular' in text_lower or 'sickle' in text_lower):
-        evidence.append('Severe systemic pain presentation')
+        evidence.append('B.PEDS: Neonate with fever > 38.0C')
         
+    if ctx.immunocompromised and obs.get('temp_c') is not None and obs['temp_c'] > 38.0:
+        evidence.append('B.IMMUNE: Immunocompromised with fever')
+
     return evidence
 
 def gate_d_vitals(ctx: TriageContext, obs: dict) -> Optional[str]:
-    # Returns prompt if vitals out of range
     hr = obs.get('hr')
     rr = obs.get('rr')
     spo2 = obs.get('spo2')
@@ -104,22 +156,22 @@ def gate_d_vitals(ctx: TriageContext, obs: dict) -> Optional[str]:
     
     prompts = []
     if hr and hr > hr_limit.get(band, 100):
-        prompts.append(f"HR {hr} exceeds {band} threshold of {hr_limit.get(band, 100)}")
+        prompts.append(f"HR {hr} > {hr_limit.get(band, 100)}")
     if rr and rr > rr_limit.get(band, 20):
-        prompts.append(f"RR {rr} exceeds {band} threshold of {rr_limit.get(band, 20)}")
+        prompts.append(f"RR {rr} > {rr_limit.get(band, 20)}")
     if spo2 and spo2 < 92:
-        prompts.append(f"SpO2 {spo2}% < 92%")
+        prompts.append(f"SpO2 {spo2}% < 92")
         
     if prompts:
-        return " Danger Vitals: " + " | ".join(prompts)
+        return "Danger Vitals: " + " | ".join(prompts) + " -> Consider ESI 2"
     return None
 
-def assign_esi_v5(age: float, obs: dict, text: str) -> TriageResult:
+def assign_esi_v5(age: float, obs: dict, text: str, critical_look: bool = False) -> TriageResult:
     ctx = TriageContext(
         age_yr=age,
         age_band=get_age_band(age),
         geriatric=age >= 65,
-        pregnancy_state='not_pregnant', # Default for now
+        pregnancy_state='not_pregnant', 
         immunocompromised=False,
         baseline_spo2=None,
         on_home_oxygen=False,
@@ -128,18 +180,19 @@ def assign_esi_v5(age: float, obs: dict, text: str) -> TriageResult:
         anticoagulated=False,
         baseline_mental_status=None,
         immunisations_current=True,
-        history_depth='partial'
+        history_depth='partial',
+        critical_look_override=critical_look
     )
     
-    if gate_a_lifesaving(ctx, obs, text):
-        return TriageResult(level=1, gate="A", evidence=["Immediate lifesaving intervention required"])
+    a_evidence = gate_a_lifesaving(ctx, obs, text)
+    if a_evidence:
+        return TriageResult(level=1, gate="A", evidence=a_evidence)
         
     b_evidence = gate_b_high_risk(ctx, obs, text)
     if b_evidence:
         return TriageResult(level=2, gate="B", evidence=b_evidence)
         
-    # Placeholder for Gate C (Resource prediction). We'll use a simple heuristic for now.
-    # If text is very long, maybe they need more resources? Just mock it.
+    # Placeholder for Gate C (Resource prediction)
     text_len = len(text.split())
     if text_len > 15:
         level_c = 3

@@ -1,6 +1,6 @@
 from esi_rules import assign_esi_v5
 
-def assign_esi_ml(age: int, spo2: float, hr: float, sbp: float, temp_c: float, rr: float, family_statements: str, symptoms: str) -> tuple[int, float, str]:
+def assign_esi_ml(age: int, spo2: float, hr: float, sbp: float, temp_c: float, rr: float, family_statements: str, symptoms: str, critical_look: bool = False) -> tuple[int, float, str]:
     """
     Adapter bridging the old signature to the new v5 pure-function engine.
     Now returns (esi, confidence, explanation)
@@ -14,7 +14,7 @@ def assign_esi_ml(age: int, spo2: float, hr: float, sbp: float, temp_c: float, r
     }
     text = f"{symptoms} {family_statements}"
     
-    result = assign_esi_v5(float(age), obs, text)
+    result = assign_esi_v5(float(age), obs, text, critical_look)
     
     # We return the new level, and a mock confidence value
     # In a full implementation, confidence would come from the conformal prediction set

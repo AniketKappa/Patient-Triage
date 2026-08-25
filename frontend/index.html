@@ -170,6 +170,10 @@
                     <div>
                         <label class="block text-sm font-medium text-gray-700">Notes / Family Statements (NLP Input)</label>
                         <textarea x-model="form.family_statements" rows="3" placeholder="Enter paramedic notes or family statements to be analyzed by AI..." class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3"></textarea>
+                        </div>
+                        <div class="flex items-center space-x-2 mt-4">
+                            <input type="checkbox" x-model="form.critical_look" class="h-4 w-4 text-red-600 border-red-300 rounded focus:ring-red-500">
+                            <label class="text-sm font-bold text-red-700">CRITICAL LOOK (Bypass to ESI 1)</label>
                     </div>
 
                     <div class="grid grid-cols-4 gap-4 bg-gray-50 p-4 rounded border">
@@ -266,7 +270,7 @@
                 now: new Date(),
                 patients: [],
                 reminders: [],
-                form: { patient_id: '', age: '', gender: 'Unspecified', symptoms: '', family_statements: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '' },
+                form: { patient_id: '', age: '', gender: 'Unspecified', symptoms: '', family_statements: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '', critical_look: false },
                 
                 init() {
                     this.fetchData();
@@ -349,6 +353,7 @@
                         hr: this.form.hr ? parseFloat(this.form.hr) : null,
                         bp_sys: this.form.bp_sys ? parseFloat(this.form.bp_sys) : null,
                         temp_c: this.form.temp_c ? parseFloat(this.form.temp_c) : null,
+                        critical_look: this.form.critical_look,
                         rr: this.form.rr ? parseFloat(this.form.rr) : null,
                         mode: this.tab
                     };
@@ -360,7 +365,7 @@
                             body: JSON.stringify(payload)
                         });
                         alert(this.tab === 'intake' ? 'Patient added to queue!' : 'Ambulance dispatched to queue!');
-                        this.form = { patient_id: '', age: '', gender: 'Unspecified', symptoms: '', family_statements: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '' };
+                        this.form = { patient_id: '', age: '', gender: 'Unspecified', symptoms: '', family_statements: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '', critical_look: false };
                         this.fetchData();
                         this.tab = 'dashboard';
                     } catch (e) {

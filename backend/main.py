@@ -47,6 +47,7 @@ class IntakeRequest(BaseModel):
     bp_sys: Optional[float] = None
     temp_c: Optional[float] = None
     rr: Optional[float] = None
+    critical_look: bool = False
     mode: str = "walkin"
 
 @app.post("/api/intake")
@@ -57,7 +58,7 @@ def new_intake(req: IntakeRequest, db: Session = Depends(get_db)):
         db.add(patient)
         db.commit()
 
-    esi, conf, expl = assign_esi_ml(req.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.rr, req.family_statements, req.symptoms)
+    esi, conf, expl = assign_esi_ml(req.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.rr, req.family_statements, req.symptoms, req.critical_look)
 
     status = "queue" if req.mode in ["walkin", "intake"] else "ambulance"
     enc = models.Encounter(
@@ -93,6 +94,7 @@ class VitalsUpdate(BaseModel):
     bp_sys: Optional[float] = None
     temp_c: Optional[float] = None
     rr: Optional[float] = None
+    critical_look: bool = False
 
 @app.post("/api/encounters/{patient_id}/vitals")
 def update_vitals(patient_id: str, req: VitalsUpdate, db: Session = Depends(get_db)):
