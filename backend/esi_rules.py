@@ -2,6 +2,17 @@ import re
 from dataclasses import dataclass
 from typing import Optional, List, Literal
 
+import os
+import joblib
+
+try:
+    vectorizer = joblib.load(os.path.join(os.path.dirname(__file__), 'resource_tfidf.pkl'))
+    model = joblib.load(os.path.join(os.path.dirname(__file__), 'resource_rf.pkl'))
+    RESOURCE_CLASSES = joblib.load(os.path.join(os.path.dirname(__file__), 'resource_classes.pkl'))
+except:
+    vectorizer, model, RESOURCE_CLASSES = None, None, []
+
+
 @dataclass(frozen=True)
 class TriageContext:
     age_yr: float
@@ -191,16 +202,43 @@ def assign_esi_v5(age: float, obs: dict, text: str, critical_look: bool = False)
     b_evidence = gate_b_high_risk(ctx, obs, text)
     if b_evidence:
         return TriageResult(level=2, gate="B", evidence=b_evidence)
+    # Gate C (ML Resource prediction)
+    if vectorizer and model:
+        features = vectorizer.transform([text]).toarray()
+        preds = model.predict(features)[0]
         
-    # Placeholder for Gate C (Resource prediction)
-    text_len = len(text.split())
-    if text_len > 15:
-        level_c = 3
-    elif text_len > 5:
-        level_c = 4
+        resource_count = 0
+        predicted_resources = []
+        for i, p in enumerate(preds):
+            if p == 1:
+                predicted_resources.append(RESOURCE_CLASSES[i])
+                if RESOURCE_CLASSES[i] == "Complex Procedure":
+                    resource_count += 2
+                else:
+                    resource_count += 1
+                    
+        if resource_count >= 2:
+            level_c = 3
+        elif resource_count == 1:
+            level_c = 4
+        else:
+            level_c = 5
+            
+        evidence_text = f"Predicted {resource_count} resources"
+        if predicted_resources:
+            evidence_text += f": {', '.join(predicted_resources)}"
     else:
-        level_c = 5
+        # Fallback if model not found
+        text_len = len(text.split())
+        if text_len > 15:
+            level_c = 3
+        elif text_len > 5:
+            level_c = 4
+        else:
+            level_c = 5
+        evidence_text = "Predicted based on text length (model fallback)"
+
         
     d_prompt = gate_d_vitals(ctx, obs)
-    return TriageResult(level=level_c, gate="C", evidence=["Predicted based on resource heuristic"], pending_prompt=d_prompt)
+    return TriageResult(level=level_c, gate="C", evidence=[evidence_text], pending_prompt=d_prompt)
 
