@@ -45,6 +45,9 @@ for i, p in enumerate(PATIENTS):
     )
     db.add(db_enc)
     db.commit()
+    db_event = models.EventLog(encounter_id=db_enc.id, event_type="INITIAL_TRIAGE", actor="AI", new_esi=esi, reason=expl)
+    db.add(db_event)
+    db.commit()
     
     if v:
         db_vit = models.Vitals(
