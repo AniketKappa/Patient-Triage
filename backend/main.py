@@ -46,6 +46,7 @@ class IntakeRequest(BaseModel):
     hr: Optional[float] = None
     bp_sys: Optional[float] = None
     temp_c: Optional[float] = None
+    rr: Optional[float] = None
     mode: str = "walkin"
 
 @app.post("/api/intake")
@@ -56,7 +57,7 @@ def new_intake(req: IntakeRequest, db: Session = Depends(get_db)):
         db.add(patient)
         db.commit()
 
-    esi, conf = assign_esi_ml(req.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.family_statements, req.symptoms)
+    esi, conf, expl = assign_esi_ml(req.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.rr, req.family_statements, req.symptoms)
 
     status = "queue" if req.mode in ["walkin", "intake"] else "ambulance"
     enc = models.Encounter(
@@ -68,7 +69,7 @@ def new_intake(req: IntakeRequest, db: Session = Depends(get_db)):
     db.commit()
     
     if req.spo2 or req.hr or req.bp_sys or req.temp_c:
-        v = models.Vitals(encounter_id=enc.id, spo2=req.spo2, hr=req.hr, bp_sys=req.bp_sys, temp_c=req.temp_c)
+        v = models.Vitals(encounter_id=enc.id, spo2=req.spo2, hr=req.hr, bp_sys=req.bp_sys, temp_c=req.temp_c, rr=req.rr)
         db.add(v)
         db.commit()
         
@@ -91,17 +92,19 @@ class VitalsUpdate(BaseModel):
     hr: Optional[float] = None
     bp_sys: Optional[float] = None
     temp_c: Optional[float] = None
+    rr: Optional[float] = None
 
 @app.post("/api/encounters/{patient_id}/vitals")
 def update_vitals(patient_id: str, req: VitalsUpdate, db: Session = Depends(get_db)):
     enc = db.query(models.Encounter).filter(models.Encounter.patient_id == patient_id, models.Encounter.status.in_(["queue", "ambulance"])).order_by(models.Encounter.id.desc()).first()
     if enc:
-        v = models.Vitals(encounter_id=enc.id, spo2=req.spo2, hr=req.hr, bp_sys=req.bp_sys, temp_c=req.temp_c)
+        v = models.Vitals(encounter_id=enc.id, spo2=req.spo2, hr=req.hr, bp_sys=req.bp_sys, temp_c=req.temp_c, rr=req.rr)
         db.add(v)
         
-        esi, conf = assign_esi_ml(enc.patient.age, req.spo2, req.hr, req.bp_sys, req.temp_c, enc.family_statements, enc.symptoms)
+        esi, conf, expl = assign_esi_ml(enc.patient.age, req.spo2, req.hr, req.bp_sys, req.temp_c, req.rr, enc.family_statements, enc.symptoms)
         enc.esi = esi
         enc.ml_confidence = conf
+        enc.explanation = expl
         db.commit()
         return {"status": "success"}
     return {"status": "not found"}
@@ -150,6 +153,7 @@ def get_patients(db: Session = Depends(get_db)):
             "symptoms": enc.symptoms.split(",") if enc.symptoms else [],
             "diagnosis": diagnosis,
             "esi": enc.esi,
+            "explanation": enc.explanation,
             "confidence": round(enc.ml_confidence, 1) if enc.ml_confidence else 0,
             "priority": compute_priority(enc.esi, wait_time_min, enc.ml_confidence if enc.ml_confidence else 0, deterioration_penalty),
             "wait_time_min": int(wait_time_min),

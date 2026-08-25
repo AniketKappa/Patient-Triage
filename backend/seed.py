@@ -30,7 +30,7 @@ for i, p in enumerate(PATIENTS):
     temp_c = v.temp_c if v else 37
     statements = "Patient complaining of " + ", ".join(p.symptoms)
     
-    esi, confidence = assign_esi_ml(p.age, spo2, hr, bp_sys, temp_c, statements)
+    esi, confidence, expl = assign_esi_ml(p.age, spo2, hr, bp_sys, temp_c, v.rr if v else 20, statements, ",".join(p.symptoms))
     
     # Create encounter
     db_enc = models.Encounter(
@@ -40,6 +40,7 @@ for i, p in enumerate(PATIENTS):
         family_statements=statements,
         esi=esi,
         ml_confidence=confidence,
+        explanation=expl,
         status="queue"
     )
     db.add(db_enc)

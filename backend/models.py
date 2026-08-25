@@ -26,6 +26,7 @@ class Encounter(Base):
     esi = Column(Integer, nullable=True)
     risk_score = Column(Float, nullable=True)
     ml_confidence = Column(Float, nullable=True)
+    explanation = Column(String, nullable=True)
     
     # Status
     status = Column(String, default="queue") # queue, ambulance, treated
