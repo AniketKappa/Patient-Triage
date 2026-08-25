@@ -30,6 +30,9 @@ def assign_esi_ml(age: int, spo2: float, hr: float, sbp: float, temp_c: float, r
     if result.missing_inputs:
         expl_lines.append(f"Missing mandatory inputs: {', '.join(result.missing_inputs)}")
         
+    if result.advisory_alerts:
+        expl_lines.extend(result.advisory_alerts)
+        
     if result.pending_prompt:
         expl_lines.append(f"Prompt: {result.pending_prompt}")
         

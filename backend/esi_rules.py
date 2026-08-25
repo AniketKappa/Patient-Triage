@@ -8,8 +8,9 @@ try:
     vectorizer = joblib.load(os.path.join(os.path.dirname(__file__), 'resource_tfidf.pkl'))
     model = joblib.load(os.path.join(os.path.dirname(__file__), 'resource_rf.pkl'))
     RESOURCE_CLASSES = joblib.load(os.path.join(os.path.dirname(__file__), 'resource_classes.pkl'))
+    outcome_model = joblib.load(os.path.join(os.path.dirname(__file__), 'outcome_rf.pkl'))
 except:
-    vectorizer, model, RESOURCE_CLASSES = None, None, []
+    vectorizer, model, outcome_model, RESOURCE_CLASSES = None, None, None, []
 
 @dataclass(frozen=True)
 class TriageContext:
@@ -38,6 +39,7 @@ class TriageResult:
     admissible_set: List[int] = field(default_factory=list)
     missing_inputs: List[str] = field(default_factory=list)
     is_insufficient_data: bool = False
+    advisory_alerts: List[str] = field(default_factory=list)
 
 NEGATION_TERMS = r"\b(no|not|denies|without|negative for|ruled out|resolved|history of)\b"
 
@@ -209,6 +211,20 @@ def assign_esi_v5(age: float, obs: dict, text: str, critical_look: bool = False)
         evidence_text = "Predicted based on heuristic (model fallback)"
         
     d_prompt = gate_d_vitals(ctx, obs)
+    
+    # Step 6: Outcome-Risk Advisory Layer
+    advisory_alerts = []
+    if outcome_model and vectorizer and level_c > 2:
+        out_preds = outcome_model.predict_proba(features)
+        # out_preds is list of 2 arrays (Admit, ICU)
+        p_admit = out_preds[0][0][1]
+        p_icu = out_preds[1][0][1]
+        
+        if p_icu > 0.10:
+            advisory_alerts.append(f"AI ADVISORY: {p_icu*100:.0f}% risk of ICU. Consider ESI 2 override.")
+        elif p_admit > 0.60:
+            advisory_alerts.append(f"AI ADVISORY: {p_admit*100:.0f}% risk of admission. Monitor closely.")
+
     return TriageResult(
         level=level_c, 
         gate="C", 
@@ -216,5 +232,6 @@ def assign_esi_v5(age: float, obs: dict, text: str, critical_look: bool = False)
         pending_prompt=d_prompt,
         confidence_label=conf_label,
         admissible_set=admissible_set,
-        missing_inputs=missing_inputs
+        missing_inputs=missing_inputs,
+        advisory_alerts=advisory_alerts
     )

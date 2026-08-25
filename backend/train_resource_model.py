@@ -63,3 +63,44 @@ joblib.dump(vectorizer, 'resource_tfidf.pkl')
 joblib.dump(model, 'resource_rf.pkl')
 joblib.dump(RESOURCE_CLASSES, 'resource_classes.pkl')
 print("Successfully saved ML assets for Gate C.")
+
+# --- Step 6: Outcome-Risk Model (Admission / ICU) ---
+print("Training Step 6 Outcome-Risk Model (Admit / ICU)...")
+# Labels: [Admit, ICU]
+outcome_data = [
+    ("sore throat, mild cough, congestion", [0, 0]),
+    ("sprained ankle, twisted, pain swelling", [0, 0]),
+    ("abdominal pain, severe nausea vomiting, stomach hurts", [1, 0]),
+    ("cut on arm, laceration, bleeding needs stitches", [0, 0]),
+    ("chest pain, shortness of breath, heavy chest", [1, 1]),
+    ("mild headache, clear vision, chronic", [0, 0]),
+    ("worst headache of life, thunderclap, sudden", [1, 1]),
+    ("burning urination, frequency, UTI symptoms", [0, 0]),
+    ("fall, deformed wrist, bone visible, fracture", [1, 0]),
+    ("allergic reaction, rash, itching hives", [0, 0]),
+    ("toothache, dental pain", [0, 0]),
+    ("ear pain, toddler earache", [0, 0]),
+    ("motor vehicle accident, neck pain whiplash", [1, 0]),
+    ("fever, chills, body aches flu", [0, 0]),
+    ("dizziness, weakness, older adult fainting syncope", [1, 0]),
+    ("asthma exacerbation, wheezing breathing heavy", [1, 0]),
+    ("suicidal ideation depressed", [1, 0]),
+    ("dislocated shoulder popped out", [0, 0]),
+    ("vomiting blood gi bleed", [1, 1]),
+    ("minor burn on finger hot pan", [0, 0]),
+    ("chest pressure arm pain", [1, 1]),
+    ("pregnant spotting cramping", [1, 0]),
+    ("abscess boil skin infection", [0, 0])
+]
+
+y_outcome = []
+for _ in range(10):
+    for text, labels in outcome_data:
+        y_outcome.append(labels)
+
+y_outcome = np.array(y_outcome)
+outcome_model = RandomForestClassifier(n_estimators=100, random_state=42)
+outcome_model.fit(X_features, y_outcome)
+
+joblib.dump(outcome_model, 'outcome_rf.pkl')
+print("Successfully saved outcome_rf.pkl for Step 6.")

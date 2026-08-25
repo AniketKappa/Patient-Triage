@@ -242,3 +242,42 @@ if os.path.exists(frontend_path):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# --- Step 7: Fairness and Calibration Monitoring ---
+@app.get("/api/metrics/fairness")
+def get_fairness_metrics(db: Session = Depends(get_db)):
+    from sqlalchemy import func
+    
+    # Wait Time by Demographic (Gender)
+    wait_times = db.query(
+        models.Patient.gender, 
+        func.avg(func.cast((func.julianday(func.current_timestamp()) - func.julianday(models.Encounter.arrival_time)) * 24 * 60, models.Integer))
+    ).join(models.Encounter).filter(models.Encounter.status.in_(["queue", "ambulance"])).group_by(models.Patient.gender).all()
+    
+    wait_time_dict = {row[0]: round(row[1], 1) if row[1] else 0 for row in wait_times}
+    
+    # Override Rates by Demographic
+    # Total encounters per gender
+    total_enc = db.query(models.Patient.gender, func.count(models.Encounter.id)).join(models.Encounter).group_by(models.Patient.gender).all()
+    total_dict = {row[0]: row[1] for row in total_enc}
+    
+    # Overrides per gender
+    overrides = db.query(models.Patient.gender, func.count(models.EventLog.id)).join(
+        models.Encounter, models.EventLog.encounter_id == models.Encounter.id
+    ).join(models.Patient).filter(models.EventLog.event_type == "HUMAN_OVERRIDE").group_by(models.Patient.gender).all()
+    
+    override_dict = {row[0]: row[1] for row in overrides}
+    
+    override_rates = {}
+    for gender, count in total_dict.items():
+        o_count = override_dict.get(gender, 0)
+        override_rates[gender] = round((o_count / count) * 100, 1) if count > 0 else 0
+        
+    return {
+        "status": "success",
+        "metrics": {
+            "avg_wait_time_mins": wait_time_dict,
+            "override_rate_pct": override_rates
+        },
+        "message": "Fairness and calibration monitoring infrastructure active."
+    }
