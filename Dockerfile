@@ -14,6 +14,9 @@ COPY backend ./backend
 # Copy the frontend code
 COPY frontend ./frontend
 
+# Set Python path so relative imports work
+ENV PYTHONPATH=/app/backend
+
 # Expose the port the app runs on
 EXPOSE 8000
 
