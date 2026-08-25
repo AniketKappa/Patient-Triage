@@ -1,0 +1,12 @@
+site_name: "Rural Community ED"
+beds: 12
+resources:
+  - XRAY
+  - BASIC_LABS
+# Lacks advanced imaging/consults. Resource predictor will calibrate downwards.
+reassessment_intervals:
+  esi_1: 0
+  esi_2: 15
+  esi_3: 30
+  esi_4: 60
+  esi_5: 120

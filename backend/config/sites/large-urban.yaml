@@ -1,0 +1,13 @@
+site_name: "Metro General Hospital"
+beds: 500
+resources:
+  - CT_SCAN
+  - MRI
+  - CATH_LAB
+  - SPECIALTY_CONSULT
+reassessment_intervals:
+  esi_1: 0
+  esi_2: 15
+  esi_3: 30
+  esi_4: 60
+  esi_5: 120
