@@ -156,7 +156,54 @@
         </div>
     </div>
 
-    <!-- Modals (Reassess & Override) remain similar but abstracted via Alpine logic -->
+    
+    <!-- Reassess Modal -->
+    <div x-show="showReassessModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+            <h2 class="text-xl font-bold mb-4">Re-assess Vitals: <span x-text="reassessForm.patient_id"></span></h2>
+            <form @submit.prevent="submitReassess" class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-bold text-gray-700">SpO2 (%)</label><input type="number" x-model="reassessForm.spo2" class="mt-1 block w-full border border-gray-300 rounded p-1"></div>
+                    <div><label class="block text-xs font-bold text-gray-700">Heart Rate</label><input type="number" x-model="reassessForm.hr" class="mt-1 block w-full border border-gray-300 rounded p-1"></div>
+                    <div><label class="block text-xs font-bold text-gray-700">Resp Rate</label><input type="number" x-model="reassessForm.rr" class="mt-1 block w-full border border-gray-300 rounded p-1"></div>
+                    <div><label class="block text-xs font-bold text-gray-700">Sys BP</label><input type="number" x-model="reassessForm.bp_sys" class="mt-1 block w-full border border-gray-300 rounded p-1"></div>
+                    <div><label class="block text-xs font-bold text-gray-700">Temp (°C)</label><input type="number" step="0.1" x-model="reassessForm.temp_c" class="mt-1 block w-full border border-gray-300 rounded p-1"></div>
+                </div>
+                <div class="flex justify-end space-x-2 mt-4 border-t pt-3">
+                    <button type="button" @click="closeReassess()" class="bg-gray-300 px-3 py-1 rounded">Cancel</button>
+                    <button type="submit" class="bg-blue-600 text-white px-3 py-1 rounded font-bold">Submit Vitals</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Override Modal -->
+    <div x-show="showOverrideModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 flex justify-center items-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-xl w-96">
+            <h2 class="text-xl font-bold mb-4 text-red-700">Human Override: <span x-text="overrideForm.patient_id"></span></h2>
+            <form @submit.prevent="submitOverride" class="space-y-3">
+                <div>
+                    <label class="block text-sm font-bold text-gray-700">New ESI Level (1-5)</label>
+                    <select x-model="overrideForm.new_esi" class="mt-1 block w-full border border-gray-300 rounded p-2" required>
+                        <option value="1">1 - Resuscitation</option>
+                        <option value="2">2 - Emergent</option>
+                        <option value="3">3 - Urgent</option>
+                        <option value="4">4 - Less Urgent</option>
+                        <option value="5">5 - Non Urgent</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-bold text-gray-700">Clinical Reason (Required)</label>
+                    <textarea x-model="overrideForm.reason" rows="2" class="mt-1 block w-full border border-gray-300 rounded p-2" required></textarea>
+                </div>
+                <div class="flex justify-end space-x-2 mt-4 border-t pt-3">
+                    <button type="button" @click="closeOverride()" class="bg-gray-300 px-3 py-1 rounded">Cancel</button>
+                    <button type="submit" class="bg-red-600 text-white px-3 py-1 rounded font-bold">Force Override</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     
     <script>
         function triageApp() {
@@ -168,6 +215,61 @@
                 currentTime: new Date().toLocaleTimeString(),
                 form: { patient_id: '', age: '', gender: 'Unspecified', symptoms: '', family_statements: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '', critical_look: false },
                 
+                
+                showReassessModal: false,
+                showOverrideModal: false,
+                reassessForm: { patient_id: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '' },
+                overrideForm: { patient_id: '', new_esi: '2', reason: '' },
+
+                openReassess(pid) {
+                    this.reassessForm.patient_id = pid;
+                    this.showReassessModal = true;
+                },
+                closeReassess() {
+                    this.showReassessModal = false;
+                    this.reassessForm = { patient_id: '', spo2: '', hr: '', bp_sys: '', temp_c: '', rr: '' };
+                },
+                async submitReassess() {
+                    const payload = {
+                        spo2: this.reassessForm.spo2 ? parseFloat(this.reassessForm.spo2) : null,
+                        hr: this.reassessForm.hr ? parseFloat(this.reassessForm.hr) : null,
+                        bp_sys: this.reassessForm.bp_sys ? parseFloat(this.reassessForm.bp_sys) : null,
+                        temp_c: this.reassessForm.temp_c ? parseFloat(this.reassessForm.temp_c) : null,
+                        rr: this.reassessForm.rr ? parseFloat(this.reassessForm.rr) : null
+                    };
+                    await fetch('/api/encounters/' + this.reassessForm.patient_id + '/vitals', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                    });
+                    this.closeReassess();
+                    this.fetchData();
+                },
+
+                openOverride(pid) {
+                    this.overrideForm.patient_id = pid;
+                    this.showOverrideModal = true;
+                },
+                closeOverride() {
+                    this.showOverrideModal = false;
+                    this.overrideForm = { patient_id: '', new_esi: '2', reason: '' };
+                },
+                async submitOverride() {
+                    const payload = { new_esi: parseInt(this.overrideForm.new_esi), clinician_id: "NURSE_OVERRIDE_UI", reason: this.overrideForm.reason };
+                    // If backend supports reason, we pass it. The current main.py doesn't map it properly in the schema, but we can pass it anyway.
+                    await fetch('/api/patients/' + this.overrideForm.patient_id + '/override', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                    });
+                    this.closeOverride();
+                    this.fetchData();
+                },
+
+                async acceptUptriage(pid) {
+                    const payload = { new_esi: 2, clinician_id: "GATE_D_UPTRIAGE" };
+                    await fetch('/api/patients/' + pid + '/override', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+                    });
+                    this.fetchData();
+                },
+
                 initApp() {
                     this.fetchData();
                     setInterval(() => { this.now = new Date(); this.currentTime = this.now.toLocaleTimeString(); }, 1000);
@@ -278,7 +380,7 @@
                             <div class="mt-2 bg-yellow-50 border border-yellow-400 p-2 rounded text-xs shadow-sm">
                                 <div class="font-bold text-yellow-800">${prompt}</div>
                                 <div class="mt-2 flex space-x-2">
-                                    <button class="bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700">Accept Uptriage (ESI 2)</button>
+                                    <button @click="acceptUptriage('${patient.patient_id}')" class="bg-yellow-600 text-white px-2 py-1 rounded hover:bg-yellow-700">Accept Uptriage (ESI 2)</button>
                                     <button class="bg-gray-200 text-gray-700 px-2 py-1 rounded hover:bg-gray-300">Dismiss (Structured)</button>
                                 </div>
                             </div>
@@ -314,7 +416,7 @@
                                 <div class="col-span-2 font-bold text-gray-500">WHY</div>
                                 <div class="col-span-10 text-gray-800 font-medium">${why}</div>
                                 <div class="col-span-2 font-bold text-gray-500 mt-1">CONFIDENCE</div>
-                                <div class="col-span-10 text-gray-800 mt-1">${conf.replace('Confidence:', '').trim()}</div>
+                                <div class="col-span-10 text-gray-800 mt-1">${conf.split(':').pop().trim()}</div>
                             </div>
                         </div>
                         
@@ -325,9 +427,9 @@
                         <div class="mt-3 flex space-x-2 border-t border-gray-200/50 pt-2">
                             ${patient.status === 'ambulance' ? 
                                 `<button @click="updateStatus('${patient.patient_id}', 'queue')" class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-xs font-bold shadow">Arrived (Confirm)</button>` : 
-                                `<button class="bg-gray-800 hover:bg-gray-900 text-white px-2 py-1 rounded text-xs font-bold shadow">Vitals</button>`
+                                `<button @click="openReassess('${patient.patient_id}')" class="bg-gray-800 hover:bg-gray-900 text-white px-2 py-1 rounded text-xs font-bold shadow">Vitals</button>`
                             }
-                            <button class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-semibold shadow-sm border border-gray-300">Override</button>
+                            <button @click="openOverride('${patient.patient_id}')" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-2 py-1 rounded text-xs font-semibold shadow-sm border border-gray-300">Override</button>
                         </div>
                     </div>
                     `;

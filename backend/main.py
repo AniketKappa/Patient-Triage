@@ -110,6 +110,7 @@ def update_status(patient_id: str, req: StatusUpdate, db: Session = Depends(get_
 class OverrideRequest(BaseModel):
     new_esi: int
     clinician_id: str
+    reason: str = ""
     reason: str
 
 @app.post("/api/patients/{patient_id}/override")
@@ -339,7 +340,7 @@ def trigger_surge(db: Session = Depends(get_db)):
         db.add(v)
         db.commit()
         
-        from database import log_event
+        
         log_event(db, enc.id, "INITIAL_TRIAGE", "AI", None, esi, expl)
         
     return {"status": "success", "message": "Surge Volume Injected (15 patients added)."}
