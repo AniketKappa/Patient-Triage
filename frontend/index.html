@@ -411,12 +411,14 @@
                             </div>
                         </div>
                         
-                        <div class="mt-3 bg-white/60 rounded p-2 text-xs border border-gray-200 shadow-sm">
-                            <div class="grid grid-cols-12 gap-1">
-                                <div class="col-span-2 font-bold text-gray-500">WHY</div>
-                                <div class="col-span-10 text-gray-800 font-medium">${why}</div>
-                                <div class="col-span-2 font-bold text-gray-500 mt-1">CONFIDENCE</div>
-                                <div class="col-span-10 text-gray-800 mt-1">${conf.split(':').pop().trim()}</div>
+                        <div class="mt-3 bg-white/60 rounded p-2 text-xs border border-gray-200 shadow-sm flex flex-col space-y-1">
+                            <div class="flex items-start space-x-2">
+                                <div class="font-bold text-gray-500 w-16">WHY</div>
+                                <div class="text-gray-800 font-medium flex-1">${why}</div>
+                            </div>
+                            <div class="flex items-start space-x-2">
+                                <div class="font-bold text-gray-500 w-16">CONFIDENCE</div>
+                                <div class="text-gray-800 font-medium flex-1">${conf.split(':').pop().trim()}</div>
                             </div>
                         </div>
                         

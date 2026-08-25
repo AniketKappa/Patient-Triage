@@ -170,7 +170,8 @@ def get_patients(db: Session = Depends(get_db)):
     reminders = []
     for enc in encounters:
         patient = enc.patient
-        wait_time_min = (datetime.utcnow() - enc.arrival_time).total_seconds() / 60.0
+        last_assessment_time = enc.vitals[-1].timestamp if enc.vitals else enc.arrival_time
+        wait_time_min = (datetime.utcnow() - last_assessment_time).total_seconds() / 60.0
         
         # CTAS Reassessment Clocks (Step 3 implementation)
         target_interval = get_ctas_reassessment_interval(enc.esi)
@@ -322,7 +323,7 @@ def trigger_surge(db: Session = Depends(get_db)):
         symp, age, gender, spo2, hr, sbp, temp, rr = random.choice(base_symptoms)
         pid = f"SURGE-{random.randint(1000, 9999)}"
         
-        p = models.Patient(patient_id=pid, age=age, gender=gender, arrival_mode="walk-in")
+        p = models.Patient(patient_id=pid, age=age, gender=gender)
         db.add(p)
         db.commit()
         
@@ -330,7 +331,7 @@ def trigger_surge(db: Session = Depends(get_db)):
         esi, conf, expl = assign_esi_ml(age, spo2, hr, sbp, temp, rr, "", symp)
         
         enc = models.Encounter(
-            patient_id=pid, symptoms=symp, esi=esi,
+            patient_id=pid, arrival_mode="walk-in", symptoms=symp, esi=esi,
             ml_confidence=conf, explanation=expl, status="queue"
         )
         db.add(enc)
