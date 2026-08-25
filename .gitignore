@@ -1,0 +1,19 @@
+# virtualenv
+bin/
+lib/
+lib64/
+include/
+pyvenv.cfg
+venv/
+.venv/
+
+# python bytecode
+__pycache__/
+*.pyc
+
+# data + models (regenerate with seed.py)
+*.db
+*.pkl
+
+# secrets
+.env
